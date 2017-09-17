@@ -1,0 +1,21 @@
+default:
+  suites:
+    default:
+        filters:
+            tags: "~@wip&&~@disabled"
+        contexts:
+          - Paq\GameBundle\Behat\HookContext
+          - Paq\GameBundle\Behat\CoreContext
+#            - FeatureContext:
+#                session:   '@session'
+  extensions:
+    Behat\Symfony2Extension: ~
+    Behat\MinkExtension:
+      show_cmd: cp %s build/tests/behat/
+      sessions:
+        default:
+          symfony2: ~
+        controller:
+          symfony2: ~
+        board:
+          symfony2: ~

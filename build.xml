@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--WARNING: THIS FILE IS OBSOLETE-->
+<!--SEE: refresh.sh-->
+<project name="Weemto" default="hello">
+    <property name="symfony_environment" value="dev" description="prod|test|dev"/>
+
+    <target name="hello">
+        <echo message="This is Weemto's Phing script" />
+    </target>
+
+    <target name="composer:install" description="Installs vendors">
+        <exec command="composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction" passthru="true" />
+    </target>
+
+    <target name="composer:install:dev" description="Installs vendors">
+        <exec command="composer install --no-interaction" passthru="true" />
+    </target>
+
+    <target name="composer:update" description="Updates all PHP vendors">
+        <exec command="composer update --prefer-dist --optimize-autoloader --no-interaction" passthru="true" />
+    </target>
+
+    <target name="setup:clean" description="Cleans the project and host as if it would be (nearly) freshly checked out - vendors installed">
+        <phingcall target="maintenance:splash:on" />
+        <phingcall target="database:backup" />
+        <exec command="rm -rf app/config/parameters.yml" />
+        <exec command="rm -rf app/cache/* app/logs/*" passthru="true" checkreturn="true" />
+        <phingcall target="composer:install" />
+        <exec command="chmod 777 -R --silent app/cache app/logs" passthru="true" checkreturn="false" />
+        <exec command="chmod 777 -R --silent web/uploads/media" passthru="true" checkreturn="false" />
+        <phingcall target="setup:database:clean" />
+        <phingcall target="setup:frontend" />
+        <exec command="app/console doctrine:fixtures:load --append --fixtures=src/Paq/GameBundle/DataFixtures/ORM --no-interaction" passthru="true" checkreturn="true" />
+        <exec command="app/console lexik:translations:import --globals" passthru="true" checkreturn="true" />
+        <exec command="app/console lexik:translations:import PaqGameBundle" passthru="true" checkreturn="true" />
+        <phingcall target="cache:clear" />
+        <phingcall target="maintenance:splash:off" />
+    </target>
+
+    <target name="setup:dev:clean" description="Setups Weemto to for development">
+        <phingcall target="setup:clean">
+            <property name="symfony_environment" value="dev" />
+        </phingcall>
+        <phingcall target="maintenance:splash:on" />
+        <phingcall target="composer:install:dev" />
+        <phingcall target="setup:test:database" />
+        <phingcall target="maintenance:splash:off" />
+    </target>
+
+    <target name="setup:ci:clean" description="Cleans the project and sets it up for continuous integration">
+        <exec command="rm -rf app/config/parameters.yml" />
+        <exec command="rm -rf app/cache/* app/logs/*" passthru="true" checkreturn="true" />
+        <phingcall target="composer:install:dev" />
+        <exec command="chmod 777 -R --silent app/cache app/logs" passthru="true" checkreturn="false" />
+        <exec command="chmod 777 -R --silent web/uploads/media" passthru="true" checkreturn="false" />
+        <phingcall target="setup:test:database" />
+    </target>
+
+    <target name="setup:database:clean">
+        <exec command="app/console doctrine:database:drop --force --if-exists --no-interaction --env=${symfony_environment}"
+              passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:database:create --if-not-exists --no-interaction --env=${symfony_environment}" passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:migrations:migrate --no-interaction --env=${symfony_environment}" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="setup:test:database">
+        <phingcall target="setup:database:clean" description="Prepare database used by tests.">
+            <property name="symfony_environment" value="test" />
+        </phingcall>
+    </target>
+
+    <target name="setup:frontend" >
+        <exec command="app/console assets:install --symlink web --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+        <exec command="app/console assetic:dump --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="cache:clear" >
+        <exec command="app/console cache:clear --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:cache:clear-metadata --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:cache:clear-query --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:cache:clear-result --env=${symfony_environment} --no-interaction" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="update" description="Updates project eg. after source code update.">
+        <phingcall target="composer:install" />
+        <phingcall target="update:database" />
+        <phingcall target="setup:frontend" />
+        <phingcall target="cache:clear" />
+    </target>
+
+    <target name="update:database" description="Updates database schema, eg. after source code update">
+        <exec command="app/console doctrine:database:create --if-not-exists --env=${symfony_environment}" passthru="true" checkreturn="true" />
+        <exec command="app/console doctrine:migrations:migrate --no-interaction --env=${symfony_environment}" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="crossbar:start">
+        <exec command="nohup /opt/crossbar/bin/crossbar start &amp;&gt; /dev/null &amp;" dir="services/crossbar" passthru="true" checkreturn="true" />
+        <!--<exec command="app/console paqgame:game-server:run &#45;&#45;no-debug &#45;&#45;no-interaction" passthru="true" checkreturn="true" />-->
+    </target>
+
+    <target name="database:backup">
+        <exec command="mysqldump -u root paqgame | gzip > ./build/backup/paqgame-`date +%Y%m%d_%H%M%S`.sql.gz" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="maintenance:splash:on">
+        <exec command="touch web/maintenance.lock" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="maintenance:splash:off">
+        <exec command="rm web/maintenance.lock" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="test:phpunit">
+        <exec command="bin/phpunit -c app/phpunit.xml.dist --verbose --process-isolation" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="test:phpunit:ci" depends="test:phpunit">
+    </target>
+
+    <target name="test:behat">
+        <exec command="bin/behat --format=progress" passthru="true" checkreturn="true" />
+    </target>
+
+    <target name="test:all" depends="test:phpunit, test:behat">
+    </target>
+
+    <target name="test:all:ci" depends="test:phpunit:ci, test:behat">
+    </target>
+
+    <target name="build:deployment-package">
+        <phingcall target="setup:clean" />
+        <delete file="build/deployment/package.tar.gz" failonerror="false" />
+        <tar destfile="build/deployment/package.tar.gz" compression="gzip" includeemptydirs="true" >
+            <fileset dir=".">
+                <include name="app/**" />
+                <exclude name="app/cache/**" />
+                <exclude name="app/logs/**" />
+                <exclude name="app/config/parameters.yml" />
+                <include name="bin/**" />
+                <include name="src/**" />
+                <include name="vendor/**" />
+                <include name="web/**" />
+                <exclude name="web/uploads/**" />
+                <include name="build.xml" />
+                <include name="composer.json" />
+                <include name="composer.lock" />
+            </fileset>
+        </tar>
+        <!-- Native TAR is much faster (10x) but harder to adjust -->
+        <!--<exec command="tar -zcf build/deployment/package.tar.gz * &#45;&#45;exclude-vcs &#45;&#45;exclude=build/deployment &#45;&#45;exclude=build/tests &#45;&#45;exclude=app/cache/* &#45;&#45;exclude=app/logs/* &#45;&#45;exclude=app/config/parameters.yml &#45;&#45;exclude=web/uploads/* &#45;&#45;exclude=.cache &#45;&#45;exclude=.config &#45;&#45;exclude=.composer &#45;&#45;exclude=.idea &#45;&#45;exclude=.phpstorm_helpers &#45;&#45;exclude=.sass-cache &#45;&#45;exclude=.bash_history &#45;&#45;exclude=docker &#45;&#45;exclude=temp &#45;&#45;exclude=itops"-->
+        <!--passthru="true" />-->
+    </target>
+</project>
